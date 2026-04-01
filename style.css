@@ -149,6 +149,8 @@ button.submit-btn:hover {
         display: block;
         column-count: 2;
         column-gap: 40px;
+        column-fill: auto;
+        height: 27cm;
     }
 
     @page {
