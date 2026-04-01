@@ -1,0 +1,187 @@
+body {
+    font-family: sans-serif;
+    margin: 20px;
+}
+
+.hidden {
+    display: none;
+}
+
+.tab-btn {
+    padding: 10px 20px;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    background: #EEE;
+}
+
+.tab-btn.active {
+    background: #FFF;
+    border-bottom: 2px solid white;
+}
+
+.tab-content {
+    border: 1px solid #ccc;
+    padding: 20px;
+    margin-top: -1px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+}
+
+button.submit-btn {
+    padding: 10px 20px;
+    background: #007BFF;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+button.submit-btn:hover {
+    background: #0056b3;
+}
+
+/* 预约查看及进度表样式 */
+.sub-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+    gap: 5px;
+}
+
+.sub-tab-btn {
+    padding: 5px 10px;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    background: #eee;
+}
+
+.sub-tab-btn.active {
+    background: #007BFF;
+    color: white;
+    border-color: #007BFF;
+}
+
+.schedule-container {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    height: 65vh;
+    border: 1px solid #ccc;
+}
+
+.schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 13px;
+    min-width: 600px;
+}
+
+.schedule-table th,
+.schedule-table td {
+    border: 1px solid #ccc;
+    text-align: center;
+}
+
+.schedule-table th {
+    background: #f4f4f4;
+    height: 35px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-shadow: 0 1px 2px #ccc;
+}
+
+/* 隐藏超出内容 */
+.schedule-table td {
+    position: relative;
+    padding: 0;
+    vertical-align: top;
+    overflow: visible;
+    height: 80px;
+}
+
+.schedule-slot {
+    position: absolute;
+    left: 0;
+    right: 0;
+    background-color: #ff9999;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    box-sizing: border-box;
+    border: 1px solid #cc0000;
+    font-size: 12px;
+    z-index: 10;
+    margin: 1px;
+    overflow: hidden;
+    min-height: 1.5em;
+}
+
+/* 打印专用样式 */
+.print-area {
+    display: none;
+}
+
+@media print {
+    body>*:not(.print-area) {
+        display: none;
+    }
+
+    .print-area {
+        display: block;
+        column-count: 2;
+        column-gap: 40px;
+    }
+
+    @page {
+        size: A4;
+        margin: 2cm;
+    }
+
+    .print-date {
+        font-weight: bold;
+        font-size: 1.2em;
+        margin-top: 15px;
+    }
+
+    .print-hr {
+        border: 0;
+        border-top: 1px solid #000;
+        margin: 5px 0 15px 0;
+    }
+
+    ul {
+        padding-left: 20px;
+        margin: 0;
+    }
+
+    li {
+        margin-bottom: 8px;
+        break-inside: avoid;
+    }
+
+    .print-title {
+        column-span: all;
+        text-align: center;
+        font-size: 1.5em;
+        margin-bottom: 20px;
+    }
+}

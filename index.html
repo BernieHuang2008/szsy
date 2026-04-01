@@ -1,0 +1,446 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统管理：教室预约与广播</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('reserve')">教室预约</button>
+        <button class="tab-btn" onclick="switchTab('view')">预约查看</button>
+        <button class="tab-btn" onclick="switchTab('broadcast')">添加广播</button>
+    </div>
+
+    <!-- 教室预约界面 -->
+    <div id="reserve-tab" class="tab-content">
+        <h2>教室预约</h2>
+        <form id="reserveForm">
+            <div class="form-group">
+                <label>日期</label>
+                <input type="date" id="res-date" required>
+            </div>
+            <div class="form-group">
+                <label>开始时间 (From)</label>
+                <input type="time" id="res-from" required>
+            </div>
+            <div class="form-group">
+                <label>结束时间 (To)</label>
+                <input type="time" id="res-to" required>
+            </div>
+            <div class="form-group">
+                <label>教室名称</label>
+                <select id="res-room-select" class="room-select" required onchange="toggleCustomRoom(this)"></select>
+                <input type="text" id="res-room-custom" class="hidden" placeholder="请输入其他教室名称" style="margin-top:5px;">
+            </div>
+            <div class="form-group">
+                <label>用途</label>
+                <input type="text" id="res-purpose" required>
+            </div>
+            <div class="form-group">
+                <label>社团名称</label>
+                <input type="text" id="res-club" required>
+            </div>
+            <button type="submit" class="submit-btn">提交预约</button>
+        </form>
+    </div>
+
+    <!-- 预约查看界面 -->
+    <div id="view-tab" class="tab-content hidden">
+        <h2>预约查看 (未来7天)</h2>
+        <div id="room-sub-tabs" class="sub-tabs">
+            <!-- 动态生成教室子选项卡 -->
+        </div>
+        <div class="schedule-container">
+            <table class="schedule-table">
+                <thead>
+                    <tr id="schedule-headers">
+                        <th style="width: 50px;">时间</th>
+                        <!-- 动态生成日期横排 -->
+                    </tr>
+                </thead>
+                <tbody id="schedule-body">
+                    <!-- 动态生成小时格子 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 添加广播界面 -->
+    <div id="broadcast-tab" class="tab-content hidden">
+        <h2>添加广播</h2>
+        <button type="button" onclick="printBroadcasts()" style="float:right; margin-bottom:10px;">打印未来一周广播</button>
+        <div style="clear:both;"></div>
+
+        <form id="broadcastForm">
+            <div class="form-group">
+                <label>社团名称</label>
+                <input type="text" id="bc-club" required>
+            </div>
+            <div class="form-group">
+                <label>广播日期</label>
+                <input type="date" id="bc-date" required>
+            </div>
+            <div class="form-group">
+                <label>广播内容</label>
+                <textarea id="bc-content" rows="4" required></textarea>
+            </div>
+            <button type="submit" class="submit-btn">添加广播</button>
+        </form>
+    </div>
+
+    <!-- 打印区域 -->
+    <div class="print-area" id="printContainer"></div>
+
+    <script>
+        // 本地临时存储所有广播，用于打印展示
+        const allBroadcasts = [];
+        let globalRooms = [];
+        let allReservations = [];
+        let activeRoom = '';
+        let future7Days = [];
+
+        // 初始化基础数据
+        async function initData() {
+            initDatePickers();
+            initFuture7Days();
+
+            try {
+                const res = await fetch('/api/rooms');
+                globalRooms = await res.json();
+                populateRooms();
+            } catch (e) {
+                console.warn('获取教室列表失败, 使用本地mock数据');
+                globalRooms = ['大礼堂', '音乐教室1', '公开课教室', '形体房', '操场'];
+                populateRooms();
+            }
+        }
+
+        // 初始化未来7天的日期数组
+        function initFuture7Days() {
+            const today = new Date();
+            const daysOfWeek = ['日', '一', '二', '三', '四', '五', '六'];
+            for (let i = 0; i < 7; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() + i);
+                const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                future7Days.push({
+                    date: dateString,
+                    label: `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} (${daysOfWeek[d.getDay()]})`
+                });
+            }
+        }
+
+        // 填充下拉框及子选项卡
+        function populateRooms() {
+            // 填充预约界面的下拉
+            const roomSelect = document.getElementById('res-room-select');
+            roomSelect.innerHTML = '';
+            globalRooms.forEach(r => {
+                roomSelect.appendChild(new Option(r, r));
+            });
+            roomSelect.appendChild(new Option('其他 (自定义)', 'other'));
+
+            // 填充预约查看的子选项卡
+            const subTabsContainer = document.getElementById('room-sub-tabs');
+            subTabsContainer.innerHTML = '';
+            globalRooms.forEach((r, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `sub-tab-btn ${idx === 0 ? 'active' : ''}`;
+                btn.textContent = r;
+                btn.onclick = () => switchSubTab(r, btn);
+                subTabsContainer.appendChild(btn);
+            });
+            if (globalRooms.length > 0) {
+                activeRoom = globalRooms[0];
+            }
+        }
+
+        // 切换下拉为自定义输入
+        function toggleCustomRoom(selectElem) {
+            const customInput = document.getElementById('res-room-custom');
+            if (selectElem.value === 'other') {
+                customInput.classList.remove('hidden');
+                customInput.required = true;
+            } else {
+                customInput.classList.add('hidden');
+                customInput.required = false;
+            }
+        }
+
+        // 初始化系统内置的日期选择器，限制可选范围为未来14天
+        function initDatePickers() {
+            const dateInputs = [document.getElementById('res-date'), document.getElementById('bc-date')];
+            const today = new Date();
+            const maxDate = new Date(today);
+            maxDate.setDate(today.getDate() + 14);
+
+            const formatDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+            dateInputs.forEach(input => {
+                if (input) {
+                    input.min = formatDate(today);
+                    input.max = formatDate(maxDate);
+                    input.value = formatDate(today);
+                }
+            });
+        }
+
+        // Tab 切换逻辑
+        async function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+
+            if (tabId === 'reserve') {
+                document.getElementById('reserve-tab').classList.remove('hidden');
+                document.querySelector('.tab-btn:nth-child(1)').classList.add('active');
+            } else if (tabId === 'view') {
+                document.getElementById('view-tab').classList.remove('hidden');
+                document.querySelector('.tab-btn:nth-child(2)').classList.add('active');
+                await loadReservations(); // 每次进入重新加载最新预约数据
+            } else {
+                document.getElementById('broadcast-tab').classList.remove('hidden');
+                document.querySelector('.tab-btn:nth-child(3)').classList.add('active');
+            }
+        }
+
+        // 切换教室子选项卡
+        function switchSubTab(room, btnElem) {
+            document.querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active'));
+            if (btnElem) btnElem.classList.add('active');
+            activeRoom = room;
+            renderSchedule();
+        }
+
+        // 从后端拉取预约数据
+        async function loadReservations() {
+            try {
+                const res = await fetch('/api/reservations');
+                allReservations = await res.json();
+            } catch (e) {
+                console.warn('获取预约记录失败，使用空集合。', e);
+                allReservations = [];
+            }
+            renderSchedule();
+        }
+
+        // 将时间字符串 "HH:MM" 转成浮点数，比如 "08:30" -> 8.5
+        function timeToFloat(t) {
+            const [h, m] = t.split(':').map(Number);
+            return h + m / 60;
+        }
+
+        // 渲染日程表
+        function renderSchedule() {
+            // 绘制表头
+            const headers = document.getElementById('schedule-headers');
+            headers.innerHTML = '<th style="width: 50px;">时间</th>';
+            future7Days.forEach(day => {
+                const th = document.createElement('th');
+                th.textContent = day.label;
+                headers.appendChild(th);
+            });
+
+            // 绘制表体（固定从 08:00 到 22:00，每小时一行，尽量压在一个页面）
+            // 14个时间段 08:00起 - 22:00
+            const tbody = document.getElementById('schedule-body');
+            tbody.innerHTML = '';
+
+            const startHour = 8;
+            const endHour = 22;
+            const totalHours = endHour - startHour; // 14小时
+
+            for (let i = 0; i < totalHours; i++) {
+                const h = startHour + i;
+                const tr = document.createElement('tr');
+                tr.id = `row-hour-${h}`;
+                const tdTime = document.createElement('td');
+                tdTime.textContent = `${h}:00`;
+                tr.appendChild(tdTime);
+
+                future7Days.forEach((day, dayIndex) => {
+                    const td = document.createElement('td');
+                    td.id = `cell-${dayIndex}-${i}`; // 给个ID方便找
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            }
+
+            // 过滤出当前房间的预约并绘制色块
+            const roomRes = allReservations.filter(r => r.room === activeRoom);
+
+            roomRes.forEach(res => {
+                // 找出它在哪一天
+                const dayIndex = future7Days.findIndex(d => d.date === res.date);
+                if (dayIndex === -1) return; // 超出未来7天范畴
+
+                const fromPos = timeToFloat(res.timeFrom);
+                const toPos = timeToFloat(res.timeTo);
+
+                // 只处理 8~22 的数据
+                if (fromPos >= endHour || toPos <= startHour) return;
+
+                const actualStart = Math.max(startHour, fromPos);
+                const actualEnd = Math.min(endHour, toPos);
+
+                const durationHours = actualEnd - actualStart;
+                const offsetHours = actualStart - startHour; // 距离顶部的便宜排数
+
+                // 计算高度占比 (假设每行高度100%是 100/totalHours) -> 我们用绝对定位百分比绘制更方便
+                // 但因为我们是用 table td relative，跨越多个td较麻烦，我们将其挂载在当前列的第一个有效格子上
+
+                // 更靠谱的做法：直接找到对应日期的这一列容器（或者将色块全扔到一个包裹层），这里为了简单演示，
+                // 我们在对应日期的表格 td 里插入绝对定位的块。
+                // 这个块的位置根据 offsetHours 向下偏移td行高的百分比是不准确的，因为td各自有边框。
+                // 为简便，我们在 td 里算相对单元格顶部。如果跨2小时也是(200%+边框)
+                // 先找起点所在行的对应单元格：
+                const startRowIndex = Math.floor(offsetHours);
+                const targetTd = document.getElementById(`cell-${dayIndex}-${startRowIndex}`);
+                if (targetTd) {
+                    const slot = document.createElement('div');
+                    slot.className = 'schedule-slot';
+
+                    // offsetHours的小数部分 * 100% 即在单元格内的 top
+                    const preciseTop = (offsetHours - startRowIndex) * 100;
+                    const preciseHeight = durationHours * 100;
+
+                    // top, height使用百分比计算，利用父td的高度
+                    slot.style.top = `${preciseTop}%`;
+                    slot.style.height = `calc(${preciseHeight}% + ${Math.floor(durationHours - 1)}px)`; // 加一点px弥补跨行的边框损耗
+                    slot.textContent = res.club; // 只显示社团名称
+                    slot.title = `${res.timeFrom}-${res.timeTo} 【${res.club}】 ${res.purpose || ''}`; // 悬上详细信息
+
+                    targetTd.appendChild(slot);
+                }
+            });
+
+            // 绘制完成后，自动将 14:00 (row-hour-14) 滚动到可视区域顶部
+            setTimeout(() => {
+                const container = document.querySelector('.schedule-container');
+                const row14 = document.getElementById('row-hour-14');
+                // 减去35定位修正，因为表头有 sticky 占用了 35px 高度
+                if (container && row14) {
+                    container.scrollTop = row14.offsetTop - 35;
+                }
+            }, 50);
+        }
+
+        // 教室预约表单提交
+        document.getElementById('reserveForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const roomSelect = document.getElementById('res-room-select').value;
+            const finalRoom = roomSelect === 'other' ? document.getElementById('res-room-custom').value : roomSelect;
+
+            const payload = {
+                date: document.getElementById('res-date').value,
+                timeFrom: document.getElementById('res-from').value,
+                timeTo: document.getElementById('res-to').value,
+                room: finalRoom,
+                purpose: document.getElementById('res-purpose').value,
+                club: document.getElementById('res-club').value
+            };
+
+            // 发送HTTP请求给后端 (打上 TODO 标记)
+            fetch('/api/reserve', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(() => {
+                // TODO: 后端处理预约逻辑
+            }).catch(err => console.log('Mock request sent (Backend TODO).', err));
+
+            // 一键添加广播联动
+            if (confirm("预约成功！是否要一键添加广播？")) {
+                switchTab('broadcast');
+
+                // 预制模板
+                document.getElementById('bc-club').value = payload.club;
+                document.getElementById('bc-date').value = payload.date;
+                document.getElementById('bc-content').value =
+                    `${payload.club} 将于 ${payload.date} ${payload.timeFrom}-${payload.timeTo} 在 ${payload.room} 进行 ${payload.purpose} 活动，欢迎参加！`;
+            }
+
+            this.reset();
+        });
+
+        // 广播表单提交
+        document.getElementById('broadcastForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            const payload = {
+                club: document.getElementById('bc-club').value,
+                date: document.getElementById('bc-date').value,
+                content: document.getElementById('bc-content').value
+            };
+
+            // 发送HTTP请求给后端 (打上 TODO 标记)
+            fetch('/api/broadcast', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(() => {
+                // TODO: 后端处理广播添加逻辑
+            }).catch(err => console.log('Mock request sent (Backend TODO).', err));
+
+            allBroadcasts.push(payload);
+            alert("广播添加成功！");
+            this.reset();
+        });
+
+        // 打印功能 (处理未来一周数据并调用 window.print)
+        function printBroadcasts() {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const nextWeek = new Date(today);
+            nextWeek.setDate(today.getDate() + 7);
+
+            // 过滤未来一周的数据
+            const filtered = allBroadcasts.filter(b => {
+                const bDate = new Date(b.date);
+                return bDate >= today && bDate <= nextWeek;
+            });
+
+            // 按日期分组
+            const grouped = {};
+            filtered.forEach(b => {
+                if (!grouped[b.date]) grouped[b.date] = [];
+                grouped[b.date].push(b);
+            });
+
+            // 生成排序后的日期键
+            const sortedDates = Object.keys(grouped).sort();
+
+            const container = document.getElementById('printContainer');
+            if (sortedDates.length === 0) {
+                container.innerHTML = '<div class="print-title">未来一周广播内容</div><p>未来一周暂无广播规划。</p>';
+            } else {
+                let html = '<div class="print-title">未来一周广播内容</div>';
+                sortedDates.forEach(dateStr => {
+                    const d = new Date(dateStr);
+                    const daysOfWeek = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+
+                    html += `<div class="print-date">${dateStr} (${daysOfWeek[d.getDay()]})</div>`;
+                    html += `<hr class="print-hr" />`;
+                    html += `<ul>`;
+                    grouped[dateStr].forEach(item => {
+                        html += `<li><strong>【${item.club}】</strong> - ${item.content}</li>`;
+                    });
+                    html += `</ul>`;
+                });
+                container.innerHTML = html;
+            }
+
+            window.print();
+        }
+
+        // 启动时初始化
+        window.onload = initData;
+    </script>
+</body>
+
+</html>
